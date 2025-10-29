@@ -93,45 +93,42 @@ class ZeptoAutomationTerminal:
         logger.info("Configuration loaded successfully")
     
     def authenticate(self):
-        """Authenticate using credentials.json file"""
+        """Authenticate using environment variables instead of local files"""
         try:
-            logger.info("Starting authentication process...")
+            logger.info("Starting authentication process (Render version)...")
             creds = None
-            token_file = 'token.json'
-            
-            # Load existing token
-            if os.path.exists(token_file):
-                creds = Credentials.from_authorized_user_file(
-                    token_file, 
-                    self.gmail_scopes + self.drive_scopes + self.sheets_scopes
+    
+            # Load credentials from environment
+            if "GOOGLE_TOKEN_JSON" in os.environ:
+                creds = Credentials.from_authorized_user_info(
+                    json.loads(os.environ["GOOGLE_TOKEN_JSON"]),
+                    scopes=self.gmail_scopes + self.drive_scopes + self.sheets_scopes
                 )
-            
-            # If no valid credentials, authenticate
+    
+            # If expired or missing, refresh or recreate
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
                     logger.info("Refreshing expired credentials...")
                     creds.refresh(Request())
-                else:
-                    logger.info("Starting new authentication flow...")
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        'credentials.json',
+                elif "GOOGLE_CREDENTIALS_JSON" in os.environ:
+                    logger.info("Starting new OAuth flow from credentials...")
+                    flow = InstalledAppFlow.from_client_config(
+                        json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"]),
                         self.gmail_scopes + self.drive_scopes + self.sheets_scopes
                     )
                     creds = flow.run_local_server(port=0)
-                
-                # Save credentials
-                with open(token_file, 'w') as token:
-                    token.write(creds.to_json())
-                logger.info("Credentials saved to token.json")
-            
-            # Build services
-            self.gmail_service = build('gmail', 'v1', credentials=creds)
-            self.drive_service = build('drive', 'v3', credentials=creds)
-            self.sheets_service = build('sheets', 'v4', credentials=creds)
-            
-            logger.info("Authentication successful!")
+    
+                # Save updated token in memory (optional)
+                os.environ["GOOGLE_TOKEN_JSON"] = creds.to_json()
+    
+            # Build API clients
+            self.gmail_service = build("gmail", "v1", credentials=creds)
+            self.drive_service = build("drive", "v3", credentials=creds)
+            self.sheets_service = build("sheets", "v4", credentials=creds)
+    
+            logger.info("Authentication successful (Render env mode)")
             return True
-            
+    
         except Exception as e:
             logger.error(f"Authentication failed: {str(e)}")
             return False
@@ -1022,4 +1019,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
